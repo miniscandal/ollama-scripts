@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Requisitos técnicos
-# Example: export OLLAMA_HOST=$(ip route show default | awk '{print $3}'):11434
 # NOTA: OLLAMA_HOST depende de ser declarada previamente en el script de inicio.
+# Example: export OLLAMA_HOST=$(ip route show default | awk '{print $3}'):11434
 
 # Requisitos técnicos de binarios
 command -v glow > /dev/null 2>&1 || {
@@ -21,7 +21,6 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Valores por defecto
-
 MODEL="granite4:latest"
 FORMAT="plain"
 LANG_INST="Respond only in Spanish."
@@ -30,13 +29,22 @@ DEBUG=false
 
 show_help() {
   cat << EOF
-Use Example: $(basename "$0") [FLAGS] "Prompt"
+Uso: $(basename "$0") [FLAGS] "PROMPT"
 
-Options:
-  --model [nombre]  LLM (Default: $MODEL)
-  --glow | --bat    Output format (Default: plain text)
-  --en | --es       Output language (Default: ES)
-  --debug           Muestra el prompt enviado
+Descripción:
+  Envía una consulta a Ollama. Todo texto que no sea un flag se capturará 
+  como el cuerpo del mensaje (Prompt).
+
+Opciones:
+  --model [nombre]  Nombre del modelo (Default: $MODEL)
+  --glow | --bat     Formato de salida visual (Default: plain text)
+  --en | --es        Idioma de la respuesta (Default: Spanish)
+  --debug            Muestra el prompt técnico enviado al servidor
+  -h, --help         Muestra esta ayuda
+
+Ejemplos:
+  $(basename "$0") --es --glow "Explícame qué es un contenedor"
+  $(basename "$0") "Dime una frase motivadora"
 EOF
   exit 0
 }
@@ -68,7 +76,13 @@ parse_params() {
       --es) LANG_INST="Respond only in Spanish." ;;
       --debug) DEBUG=true ;;
       -h | --help) show_help ;;
-      *) break ;;
+      --*)
+        echo "Error: Flag no reconocido '$1'" >&2
+        show_help
+        ;;
+      *)
+        break
+        ;;
     esac
     shift
   done
