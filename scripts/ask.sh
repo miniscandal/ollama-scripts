@@ -1,68 +1,75 @@
 #!/usr/bin/env bash
-# Requisitos técnicos
-# NOTA: OLLAMA_HOST depende de ser declarada previamente en el script de inicio.
-# Example: export OLLAMA_HOST=$(ip route show default | awk '{print $3}'):11434
 
-# Requisitos técnicos de binarios
-command -v glow > /dev/null 2>&1 || {
-  echo "Error: glow not found." >&2
-  exit 1
-}
-command -v batcat > /dev/null 2>&1 || {
-  echo "Error: batcat not found." >&2
-  exit 1
-}
+# ==============================================================================
+# SCRIPT: ask.sh
+# DESCRIPTION: CLI client for Ollama optimized for hybrid environments (WSL).
+# REQUIREMENTS: ollama (host), glow/batcat (rendering), curl.
+# ==============================================================================
 
-# Requisito de variable de entorno (Fail-fast)
-: "${OLLAMA_HOST:?Error: OLLAMA_HOST is not defined. Declare it before running.}"
+# --- Dependency Verification ---
+# Ensures all required binaries are available before execution.
+for cmd in glow batcat curl; do
+  command -v "$cmd" > /dev/null 2>&1 || {
+    echo "Error: Missing dependency '$cmd'. Please install it to proceed." >&2
+    exit 1
+  }
+done
 
-# Configuración de Bash segura
+# --- Environment Configuration (Fail-fast) ---
+: "${OLLAMA_HOST:?Error: OLLAMA_HOST is not defined. Example: export OLLAMA_HOST=127.0.0.1:11434}"
+
+# --- Bash Security Settings ---
 set -euo pipefail
 IFS=$'\n\t'
 
-# Valores por defecto
+# --- Internal State & Default Values ---
 MODEL="granite4:latest"
 FORMAT="plain"
 LANG_INST="Respond only in Spanish."
 BASE_INST="Be brief and concise."
-DEBUG=false
+VERBOSE=false
 
 show_help() {
   cat << EOF
-Uso: $(basename "$0") [FLAGS] "PROMPT"
+Usage: $(basename "$0") [FLAGS] "PROMPT"
 
-Descripción:
-  Envía una consulta a Ollama. Todo texto que no sea un flag se capturará 
-  como el cuerpo del mensaje (Prompt).
+Description:
+  Simple CLI interface for Ollama. Any arguments not recognized as flags
+  are automatically concatenated as the message body (Prompt).
 
-Opciones:
-  --model [nombre]  Nombre del modelo (Default: $MODEL)
-  --glow | --bat     Formato de salida visual (Default: plain text)
-  --en | --es        Idioma de la respuesta (Default: Spanish)
-  --debug            Muestra el prompt técnico enviado al servidor
-  -h, --help         Muestra esta ayuda
+Options:
+  --model [name]   Model name (Default: $MODEL)
+  --glow | --bat   Visual output format (Default: plain text)
+  --en | --es      Response language (Default: Spanish)
+  --verbose        Show metadata and the final constructed technical prompt
+  -h, --help       Show this help message
 
-Ejemplos:
-  $(basename "$0") --es --glow "Explícame qué es un contenedor"
-  $(basename "$0") "Dime una frase motivadora"
+Examples:
+  $(basename "$0") --es --glow "Explain what a container is"
+  $(basename "$0") "Tell me a motivational quote"
 EOF
   exit 0
 }
 
+# --- Infrastructure Management ---
+# If the server is unreachable, it attempts to launch it on the Windows host via PowerShell.
+# Designed for WSL workflows where Ollama runs on the Windows side.
 check_server() {
-  if ! curl -s -I --connect-timeout 2 http://$OLLAMA_HOST > /dev/null; then
-    echo "Ollama Serve Starting..."
+  if ! curl -s -I --connect-timeout 2 "http://$OLLAMA_HOST" > /dev/null; then
+    echo "Ollama not detected at $OLLAMA_HOST. Attempting to start service..."
     powershell.exe -command "Start-Process 'ollama' -ArgumentList 'serve'"
 
-    until curl -s http://$OLLAMA_HOST > /dev/null; do
+    # Polling loop: waits until the socket accepts connections
+    until curl -s "http://$OLLAMA_HOST" > /dev/null; do
       printf "."
       sleep 1
     done
 
-    echo -e "Server Connected | HOST: $OLLAMA_HOST\n"
+    echo -e "\nServer Connected | HOST: $OLLAMA_HOST\n"
   fi
 }
 
+# --- Argument Parsing ---
 parse_params() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -74,38 +81,41 @@ parse_params() {
       --bat) FORMAT="bat" ;;
       --en) LANG_INST="Respond only in English." ;;
       --es) LANG_INST="Respond only in Spanish." ;;
-      --debug) DEBUG=true ;;
+      --verbose) VERBOSE=true ;;
       -h | --help) show_help ;;
       --*)
-        echo "Error: Flag no reconocido '$1'" >&2
+        echo "Error: Unrecognized flag '$1'" >&2
         show_help
         ;;
-      *)
-        break
-        ;;
+      *) break ;;
     esac
     shift
   done
   QUESTION="$*"
 }
 
+# --- Main Logic ---
 main() {
   parse_params "$@"
   [[ -z "$QUESTION" ]] && show_help
 
   check_server
 
+  # Format instruction injection based on the rendering tool
   local format_inst="Use Markdown."
   [[ "$FORMAT" == "plain" ]] && format_inst="Write in plain text. No markdown."
 
+  # Technical Prompt Construction (System Prompt Emulation)
   local final_prompt="[SYSTEM][MANDATORY] $LANG_INST $BASE_INST $format_inst [/SYSTEM]\nUSER: $QUESTION"
 
-  if [[ "$DEBUG" == true ]]; then
-    echo -e "--- DEBUG ---\nHost: $OLLAMA_HOST\nModel: $MODEL\nPrompt: $final_prompt\n-------------"
+  if [[ "$VERBOSE" == true ]]; then
+    echo -e "--- VERBOSE ---\nHost: $OLLAMA_HOST\nModel: $MODEL\nPrompt: $final_prompt\n-------------"
   fi
 
+  # Inference execution
   response=$(ollama run "$MODEL" "$final_prompt")
 
+  # Output rendering pipeline
   case "$FORMAT" in
     glow)
       echo "$response" | glow -
