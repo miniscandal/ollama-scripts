@@ -15,6 +15,10 @@ for cmd in glow batcat curl; do
   }
 done
 
+# --- Resource Location & Path Normalization ---
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RENDER_SERVICE="$(dirname "$CURRENT_DIR")/lib/render.pl"
+
 # --- Environment Configuration (Fail-fast) ---
 : "${OLLAMA_HOST:?Error: OLLAMA_HOST is not defined. Example: export OLLAMA_HOST=127.0.0.1:11434}"
 
@@ -58,7 +62,7 @@ EOF
 # Designed for WSL workflows where Ollama runs on the Windows side.
 check_server() {
   if ! curl -s -I --connect-timeout 2 "http://$OLLAMA_HOST" > /dev/null; then
-    echo "Ollama not detected at $OLLAMA_HOST. Attempting to start service..."
+    echo -n "Ollama not detected at $OLLAMA_HOST. Attempting to start service..."
     powershell.exe -command "Start-Process 'ollama' -ArgumentList 'serve'"
 
     # Polling loop: waits until the socket accepts connections
@@ -127,26 +131,8 @@ main() {
       echo "$response" | batcat --style=plain -l md --paging=never
       ;;
     pretty)
-      echo "$response" | perl -0777 -ne '
-      @chunks = split(/(^```.*?^```)/ms, $_);
-      foreach $chunk (@chunks) {
-          if ($chunk =~ /^```/) {
-              # Es un bloque de código: lo mandamos a batcat
-              open(my $pipe, "| batcat --style=header,grid,numbers --theme=\"Sublime Snazzy\" --paging=never -l md") or die;
-              print $pipe $chunk;
-              close($pipe);
-          } else {
-              # Es texto normal: lo mandamos a glow
-              if ($chunk =~ /\S/) { # Solo si no está vacío
-                  open(my $pipe, "| glow -") or die;
-                  print $pipe $chunk;
-                  close($pipe);
-              }
-          }
-      }
-    '
+      echo "$response" | $RENDER_SERVICE
       ;;
-
     *)
       echo "$response"
       ;;
