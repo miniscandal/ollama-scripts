@@ -39,7 +39,9 @@ Description:
 
 Options:
   --model [name]   Model name (Default: $MODEL)
-  --glow | --bat   Visual output format (Default: plain text)
+  --pretty         Smart hybrid: markdown for text (glow) + syntax for code (bat)
+  --glow           Render full response using glow (Markdown)
+  --bat            Render full response using batcat (Code highlight)
   --en | --es      Response language (Default: Spanish)
   --verbose        Show metadata and the final constructed technical prompt
   -h, --help       Show this help message
@@ -77,6 +79,7 @@ parse_params() {
         MODEL="$2"
         shift
         ;;
+      --pretty) FORMAT="pretty" ;;
       --glow) FORMAT="glow" ;;
       --bat) FORMAT="bat" ;;
       --en) LANG_INST="Respond only in English." ;;
@@ -123,6 +126,27 @@ main() {
     bat)
       echo "$response" | batcat --style=plain -l md --paging=never
       ;;
+    pretty)
+      echo "$response" | perl -0777 -ne '
+      @chunks = split(/(^```.*?^```)/ms, $_);
+      foreach $chunk (@chunks) {
+          if ($chunk =~ /^```/) {
+              # Es un bloque de código: lo mandamos a batcat
+              open(my $pipe, "| batcat --style=header,grid,numbers --theme=\"Sublime Snazzy\" --paging=never -l md") or die;
+              print $pipe $chunk;
+              close($pipe);
+          } else {
+              # Es texto normal: lo mandamos a glow
+              if ($chunk =~ /\S/) { # Solo si no está vacío
+                  open(my $pipe, "| glow -") or die;
+                  print $pipe $chunk;
+                  close($pipe);
+              }
+          }
+      }
+    '
+      ;;
+
     *)
       echo "$response"
       ;;
