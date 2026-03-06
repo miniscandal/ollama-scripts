@@ -6,32 +6,14 @@
 # REQUIREMENTS: ollama (host), glow/batcat (rendering), curl.
 # ==============================================================================
 
-# --- Dependency Verification ---
-# Ensures all required binaries are available before execution.
-for cmd in glow batcat curl; do
-  command -v "$cmd" > /dev/null 2>&1 || {
-    echo "Error: Missing dependency '$cmd'. Please install it to proceed." >&2
-    exit 1
-  }
-done
-
-# --- Resource Location & Path Normalization ---
-CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RENDER_SERVICE="$(dirname "$CURRENT_DIR")/lib/render.pl"
-
 # --- Environment Configuration (Fail-fast) ---
 : "${OLLAMA_HOST:?Error: OLLAMA_HOST is not defined. Example: export OLLAMA_HOST=127.0.0.1:11434}"
+export OLLAMA_HOST=$(ip route show default | awk '{print $3}'):11434
 
-# --- Bash Security Settings ---
-set -euo pipefail
-IFS=$'\n\t'
-
-# --- Internal State & Default Values ---
 MODEL="granite4:latest"
-FORMAT="plain"
+FORMAT=""
 LANG_INST="Respond only in Spanish."
 BASE_INST="Be brief and concise."
-VERBOSE=false
 
 show_help() {
   cat << EOF
@@ -42,16 +24,13 @@ Description:
   are automatically concatenated as the message body (Prompt).
 
 Options:
-  --model [name]   Model name (Default: $MODEL)
-  --pretty         Smart hybrid: markdown for text (glow) + syntax for code (bat)
-  --glow           Render full response using glow (Markdown)
-  --bat            Render full response using batcat (Code highlight)
+  --plain          Render full response using plain text
   --en | --es      Response language (Default: Spanish)
   --verbose        Show metadata and the final constructed technical prompt
   -h, --help       Show this help message
 
 Examples:
-  $(basename "$0") --es --glow "Explain what a container is"
+  $(basename "$0") --es "Explain what a container is"
   $(basename "$0") "Tell me a motivational quote"
 EOF
   exit 0
@@ -79,13 +58,7 @@ check_server() {
 parse_params() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --model)
-        MODEL="$2"
-        shift
-        ;;
-      --pretty) FORMAT="pretty" ;;
-      --glow) FORMAT="glow" ;;
-      --bat) FORMAT="bat" ;;
+      --plain) FORMAT="plain" ;;
       --en) LANG_INST="Respond only in English." ;;
       --es) LANG_INST="Respond only in Spanish." ;;
       --verbose) VERBOSE=true ;;
@@ -122,22 +95,7 @@ main() {
   # Inference execution
   response=$(ollama run "$MODEL" "$final_prompt")
 
-  # Output rendering pipeline
-  case "$FORMAT" in
-    glow)
-      echo "$response" | glow -
-      ;;
-    bat)
-      echo "$response" | batcat --style=plain -l md --paging=never
-      ;;
-    pretty)
-      echo "$response" | $RENDER_SERVICE
-      ;;
-    *)
-      echo "$response"
-      ;;
-  esac
-
+  echo $response
 }
 
 main "$@"
