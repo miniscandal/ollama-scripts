@@ -29,7 +29,7 @@ Description:
 Options:
   --plain          Render full response using plain text
   --en | --es      Response language (Default: Spanish)
-  --verbose        Show metadata and the final constructed technical prompt
+  --debug        Show metadata and the final constructed technical prompt
   -h, --help       Show this help message
 
 Examples:
@@ -45,7 +45,7 @@ parse_params() {
       --plain) TEXT_PLAIN=true ;;
       --en) LANG_INST="Respond only in English." ;;
       --es) LANG_INST="Respond only in Spanish." ;;
-      --verbose) VERBOSE=true ;;
+      --debug) DEBUG=true ;;
       -h | --help) show_help ;;
       --)
         shift
@@ -66,21 +66,29 @@ main() {
   parse_params "$@"
   [[ -z "$QUESTION" ]] && show_help
 
-  # Format instruction injection based on the rendering tool
+  # Technical Prompt Construction
   local format_inst="Use Markdown."
   [[ "$TEXT_PLAIN" == true ]] && format_inst="Write in plain text. No markdown."
+  local SYSTEM_PROMPT="[SYSTEM][MANDATORY]$LANG_INST $BASE_INST $format_inst[/SYSTEM]"
+  local FINAL_PROMPT="$SYSTEM_PROMPT[USER]$QUESTION[/USER]"
 
-  # Technical Prompt Construction (System Prompt Emulation)
-  local final_prompt="[SYSTEM][MANDATORY] $LANG_INST $BASE_INST $format_inst [/SYSTEM]\nUSER: $QUESTION"
+  if [[ "$DEBUG" == true ]]; then
+    cat << EOF >&2
 
-  if [[ "$VERBOSE" == true ]]; then
-    echo -e "--- VERBOSE ---\nHost: $OLLAMA_HOST\nModel: $MODEL\nPrompt: $final_prompt\n-------------"
+------- DEBUG -------
+Host: $OLLAMA_HOST
+Model: $MODEL
+Format Style: $([[ "$TEXT_PLAIN" ]] && echo "Text plain" || echo "Markdown")
+Prompt:
+$(echo "$FINAL_PROMPT" | fold -s -w 60 | sed 's/^/ /')
+---------------------
+EOF
   fi
 
   # Inference execution
-  response=$(ollama run "$MODEL" "$final_prompt")
+  response=$(ollama run "$MODEL" "$FINAL_PROMPT")
 
-  echo "$response"
+  echo -e "\n$response\n"
 }
 
 main "$@"
