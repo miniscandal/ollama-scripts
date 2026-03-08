@@ -14,6 +14,7 @@ if ! curl -s -I --connect-timeout 2 --max-time 3 "http://$OLLAMA_HOST" > /dev/nu
   exit 1
 fi
 
+TEXT_PLAIN=false
 MODEL="granite4:latest"
 LANG_INST="Respond only in Spanish."
 BASE_INST="Be brief and concise."
@@ -79,7 +80,7 @@ main() {
   fi
 
   local format_inst="Use Markdown."
-  [[ "$TEXT_PLAIN" == true ]] && format_inst="Write in plain text. No markdown."
+  $TEXT_PLAIN && format_inst="Write in plain text. No markdown."
 
   local SYSTEM_PROMPT="[SYSTEM][MANDATORY]$LANG_INST $BASE_INST $format_inst[/SYSTEM]"
   local CONTEXT_BLOCK="[CONTEXT]${input_data:-"No stream data provided."}[/CONTEXT]"
@@ -90,8 +91,8 @@ main() {
     cat << EOF >&2
 ------- DEBUG -------
 Host: $OLLAMA_HOST | Model: $MODEL
-Format: $([[ "$TEXT_PLAIN" == true ]] && echo "Plain" || echo "Markdown")
-Stream Data: $([[ "$has_input" == true ]] && echo "YES (lines: $line_count, size: $byte_size)" || echo "NO")
+Format: $($TEXT_PLAIN && echo "Plain" || echo "Markdown")
+Stream Data: $($has_input && echo "YES (lines: $line_count, size: $byte_size)" || echo "NO")
 Prompt Structure:
 $(echo "$DEBUG_PROMPT" | fold -s -w 80 | sed 's/^/  /')
 ---------------------
