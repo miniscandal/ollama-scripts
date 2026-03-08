@@ -27,10 +27,10 @@ Description:
   are automatically concatenated as the message body (Prompt).
 
 Options:
-  --plain          Render full response using plain text
-  --en | --es      Response language (Default: Spanish)
-  --debug        Show metadata and the final constructed technical prompt
-  -h, --help       Show this help message
+  --plain | -p   Render full response using plain text
+  --en | --es    Response language (Default: Spanish)
+  --debug | -d   Show metadata and the final constructed technical prompt
+  -h, --help     Show this help message
 
 Examples:
   $(basename "$0") --es "Explain what a container is"
@@ -42,10 +42,10 @@ EOF
 parse_params() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --plain) TEXT_PLAIN=true ;;
+      --plain | -p) TEXT_PLAIN=true ;;
       --en) LANG_INST="Respond only in English." ;;
       --es) LANG_INST="Respond only in Spanish." ;;
-      --debug) DEBUG=true ;;
+      --debug | -d) DEBUG=true ;;
       -h | --help) show_help ;;
       --)
         shift
@@ -66,42 +66,39 @@ main() {
   parse_params "$@"
   [[ -z "$QUESTION" ]] && show_help
 
-  local pipe_content=""
-  local is_piped="NO"
+  local input_data=""
+  local has_input=false
   local line_count=0
   local byte_size=0
 
   if [[ ! -t 0 ]]; then
-    pipe_content=$(cat -)
-    is_piped=true
-    line_count=$(wc -l <<< "$pipe_content")
-    byte_size=$(wc -c <<< "$pipe_content")
+    input_data=$(cat -)
+    has_input=true
+    line_count=$(wc -l <<< "$input_data")
+    byte_size=$(wc -c <<< "$input_data")
   fi
 
-  # Technical Prompt Construction
   local format_inst="Use Markdown."
   [[ "$TEXT_PLAIN" == true ]] && format_inst="Write in plain text. No markdown."
+
   local SYSTEM_PROMPT="[SYSTEM][MANDATORY]$LANG_INST $BASE_INST $format_inst[/SYSTEM]"
-  local FINAL_PROMPT="$SYSTEM_PROMPT[CONTEXT]$pipe_content[/CONTEXT][USER]$QUESTION[/USER]"
+  local CONTEXT_BLOCK="[CONTEXT]${input_data:-"No stream data provided."}[/CONTEXT]"
+  local FINAL_PROMPT="${SYSTEM_PROMPT}${CONTEXT_BLOCK}[USER]${QUESTION}[/USER]"
 
   if [[ "$DEBUG" == true ]]; then
+    local DEBUG_PROMPT="${SYSTEM_PROMPT}[CONTEXT](Stream Data, lines: $line_count, size: $byte_size)[/CONTEXT][USER]${QUESTION}[/USER]"
     cat << EOF >&2
-
 ------- DEBUG -------
-Host: $OLLAMA_HOST
-Model: $MODEL
-Format Style: $([[ "$TEXT_PLAIN" ]] && echo "Text plain" || echo "Markdown")
-Stream Data: $([[ "$is_piped" == true ]] && echo "Yes ($line_count lines, $byte_size bytes)" || echo "No")
-Prompt:
-$(echo "$SYSTEM_PROMPT[CONTEXT](Stream Data...)[/CONTEXT][USER]$QUESTION[/USER]" | fold -s -w 80 | sed 's/^/ /')
+Host: $OLLAMA_HOST | Model: $MODEL
+Format: $([[ "$TEXT_PLAIN" == true ]] && echo "Plain" || echo "Markdown")
+Stream Data: $([[ "$has_input" == true ]] && echo "YES (lines: $line_count, size: $byte_size)" || echo "NO")
+Prompt Structure:
+$(echo "$DEBUG_PROMPT" | fold -s -w 80 | sed 's/^/  /')
 ---------------------
 EOF
   fi
 
-  # Inference execution
-  response=$(ollama run "$MODEL" "$FINAL_PROMPT")
-
-  echo -e "\n$response\n"
+  echo -e "\n$(ollama run "$MODEL" "$FINAL_PROMPT")\n"
 }
 
 main "$@"
