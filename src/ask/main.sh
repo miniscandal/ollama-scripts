@@ -66,11 +66,23 @@ main() {
   parse_params "$@"
   [[ -z "$QUESTION" ]] && show_help
 
+  local pipe_content=""
+  local is_piped="NO"
+  local line_count=0
+  local byte_size=0
+
+  if [[ ! -t 0 ]]; then
+    pipe_content=$(cat -)
+    is_piped=true
+    line_count=$(wc -l <<< "$pipe_content")
+    byte_size=$(wc -c <<< "$pipe_content")
+  fi
+
   # Technical Prompt Construction
   local format_inst="Use Markdown."
   [[ "$TEXT_PLAIN" == true ]] && format_inst="Write in plain text. No markdown."
   local SYSTEM_PROMPT="[SYSTEM][MANDATORY]$LANG_INST $BASE_INST $format_inst[/SYSTEM]"
-  local FINAL_PROMPT="$SYSTEM_PROMPT[USER]$QUESTION[/USER]"
+  local FINAL_PROMPT="$SYSTEM_PROMPT[CONTEXT]$pipe_content[/CONTEXT][USER]$QUESTION[/USER]"
 
   if [[ "$DEBUG" == true ]]; then
     cat << EOF >&2
@@ -79,8 +91,9 @@ main() {
 Host: $OLLAMA_HOST
 Model: $MODEL
 Format Style: $([[ "$TEXT_PLAIN" ]] && echo "Text plain" || echo "Markdown")
+Stream Data: $([[ "$is_piped" == true ]] && echo "Yes ($line_count lines, $byte_size bytes)" || echo "No")
 Prompt:
-$(echo "$FINAL_PROMPT" | fold -s -w 60 | sed 's/^/ /')
+$(echo "$SYSTEM_PROMPT[CONTEXT](Stream Data...)[/CONTEXT][USER]$QUESTION[/USER]" | fold -s -w 80 | sed 's/^/ /')
 ---------------------
 EOF
   fi
