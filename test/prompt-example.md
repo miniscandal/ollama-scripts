@@ -1,6 +1,1 @@
-"Explica el propósito principal y proporciona un ejemplo complejo para: Python, Java y Ruby.
-Sigue este esquema de respuesta para cada lenguaje:
-# [Nombre del Lenguaje]
-**Propósito:** [Descripción breve]
-**Ejemplo Complejo:** ```[lenguaje]
-[Código con lógica avanzada]"
+"Explica el propósito y da un ejemplo complejo para Python, Java y Ruby. Usa este formato para cada uno: # [Nombre]\n**Propósito:** [Breve]\n**Ejemplo Complejo:** \`\`\`[lenguaje]\n[Código]\n\`\`\`"
